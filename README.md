@@ -1,4 +1,5 @@
 Run TriplesToTrec with the following 14 files from DBPedia 2015-10 as input
+
 * anchor_text_en.ttl
 * article_categories_en.ttl
 * category_labels_en.ttl
@@ -13,3 +14,5 @@ Run TriplesToTrec with the following 14 files from DBPedia 2015-10 as input
 * persondata_en.ttl
 * short_abstracts_en.ttl
 * transitive_redirects_en.ttl
+
+Some Spark parameters tuning is required to run it successfully, for example `--executor-memory 22g --driver-memory 6g --conf spark.yarn.executor.memoryOverhead=1g`.

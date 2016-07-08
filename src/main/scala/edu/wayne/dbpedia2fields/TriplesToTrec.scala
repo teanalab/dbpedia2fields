@@ -50,7 +50,7 @@ object TriplesToTrec {
     }.map(Util.splitTurtle)
 
     val names = triples.filter { case (subj, pred, obj) =>
-      namePredicates.contains(subj)
+      namePredicates.contains(pred)
     }.map { case (subj, pred, obj) =>
       (subj, obj)
     }
