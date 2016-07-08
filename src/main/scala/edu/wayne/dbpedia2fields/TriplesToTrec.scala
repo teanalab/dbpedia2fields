@@ -111,32 +111,34 @@ object TriplesToTrec {
 
     new CoGroupedRDD(Seq(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames),
       Partitioner.defaultPartitioner(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames)).
-      mapValues { case Array(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames) =>
-        (names.asInstanceOf[Seq[String]],
-          attributes.asInstanceOf[Seq[(Option[String], String)]],
-          categories.asInstanceOf[Seq[String]],
-          similarEntityNames.asInstanceOf[Seq[String]],
-          relatedEntityNames.asInstanceOf[Seq[(Option[String], String)]],
-          incomingEntityNames.asInstanceOf[Seq[(String, Option[String])]])
-      }.flatMap { case (entityUri, (names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames)) =>
+      mapValues { case Array(namesArray, attributesArray, categoriesArray, similarEntityNamesArray,
+      relatedEntityNamesArray, incomingEntityNamesArray) =>
+        (namesArray.asInstanceOf[Seq[String]],
+          attributesArray.asInstanceOf[Seq[(Option[String], String)]],
+          categoriesArray.asInstanceOf[Seq[String]],
+          similarEntityNamesArray.asInstanceOf[Seq[String]],
+          relatedEntityNamesArray.asInstanceOf[Seq[(Option[String], String)]],
+          incomingEntityNamesArray.asInstanceOf[Seq[(String, Option[String])]])
+      }.flatMap { case (entityUri, (namesSeq, attributesSeq, categoriesSeq, similarEntityNamesSeq,
+    relatedEntityNamesSeq, incomingEntityNamesSeq)) =>
       Array("<DOC>\n<DOCNO>" + entityUri + "</DOCNO>\n<TEXT>") ++
         Array("<names>") ++
-        names ++
+        namesSeq ++
         Array("</names>") ++
         Array("<attributes>") ++
-        attributes ++
+        attributesSeq ++
         Array("</attributes>") ++
         Array("<categories>") ++
-        categories ++
+        categoriesSeq ++
         Array("</categories>") ++
         Array("<similarentitynames>") ++
-        similarEntityNames ++
+        similarEntityNamesSeq ++
         Array("</similarentitynames>") ++
         Array("<relatedentitynames>") ++
-        relatedEntityNames ++
+        relatedEntityNamesSeq ++
         Array("</relatedentitynames>") ++
         Array("<incomingentitynames>") ++
-        incomingEntityNames ++
+        incomingEntityNamesSeq ++
         Array("</incomingentitynames>")
     }.saveAsTextFile(pathToOutput)
   }
