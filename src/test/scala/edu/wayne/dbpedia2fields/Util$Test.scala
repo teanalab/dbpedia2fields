@@ -9,7 +9,7 @@ class Util$Test extends FunSuite {
 
   test("testSplitTripleString") {
     val tripleOne = Util.splitTurtle("<http://dbpedia.org/resource/Anarchism> <http://purl.org/dc/terms/subject> <http://dbpedia.org/resource/Category:Political_culture> .")
-    assert(tripleOne._1 === "<http://dbpeddia.org/resource/Anarchism>")
+    assert(tripleOne._1 === "<http://dbpedia.org/resource/Anarchism>")
     assert(tripleOne._2 === "<http://purl.org/dc/terms/subject>")
     assert(tripleOne._3 === "<http://dbpedia.org/resource/Category:Political_culture>")
 

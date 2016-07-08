@@ -125,27 +125,34 @@ object TriplesToTrec {
     }
 
     new CoGroupedRDD(Seq(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames),
-      Partitioner.defaultPartitioner(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames))
-      .flatMap { case (entityUri, names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames) =>
-        Array("<DOC>\n<DOCNO>" + entityUri + "</DOCNO>\n<TEXT>") ++
-          Array("<names>") ++
-          names ++
-          Array("</names>") ++
-          Array("<attributes>") ++
-          attributes ++
-          Array("</attributes>") ++
-          Array("<categories>") ++
-          categories ++
-          Array("</categories>") ++
-          Array("<similarentitynames>") ++
-          similarEntityNames ++
-          Array("</similarentitynames>") ++
-          Array("<relatedentitynames>") ++
-          relatedEntityNames ++
-          Array("</relatedentitynames>") ++
-          Array("<incomingentitynames>") ++
-          incomingEntityNames ++
-          Array("</incomingentitynames>")
-      }.saveAsTextFile(pathToOutput)
+      Partitioner.defaultPartitioner(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames)).
+      mapValues { case Array(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames) =>
+        (names.asInstanceOf[Array[String]],
+          attributes.asInstanceOf[Array[(Option[String], String)]],
+          categories.asInstanceOf[Array[String]],
+          similarEntityNames.asInstanceOf[Array[String]],
+          relatedEntityNames.asInstanceOf[Array[(Option[String], String)]],
+          incomingEntityNames.asInstanceOf[Array[(String, Option[String])]])
+      }.flatMap { case (entityUri, (names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames)) =>
+      Array("<DOC>\n<DOCNO>" + entityUri + "</DOCNO>\n<TEXT>") ++
+        Array("<names>") ++
+        names ++
+        Array("</names>") ++
+        Array("<attributes>") ++
+        attributes ++
+        Array("</attributes>") ++
+        Array("<categories>") ++
+        categories ++
+        Array("</categories>") ++
+        Array("<similarentitynames>") ++
+        similarEntityNames ++
+        Array("</similarentitynames>") ++
+        Array("<relatedentitynames>") ++
+        relatedEntityNames ++
+        Array("</relatedentitynames>") ++
+        Array("<incomingentitynames>") ++
+        incomingEntityNames ++
+        Array("</incomingentitynames>")
+    }.saveAsTextFile(pathToOutput)
   }
 }
