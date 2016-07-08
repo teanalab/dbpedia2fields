@@ -70,20 +70,22 @@ object TriplesToTrec {
         pred != redirectsPredicate
     }
 
+    val predNamesMap = sc.broadcast(regularTriples.map { case (subj, pred, obj) =>
+      (pred, None)
+    }.join(names).map { case (pred, (_, predName)) =>
+      (pred, predName)
+    }.collectAsMap())
+
     val attributes = regularTriples.filter { case (subj, pred, obj) =>
       obj.startsWith("\"")
     }.map { case (subj, pred, obj) =>
-      (pred, (subj, obj))
-    }.leftOuterJoin(names).map { case (pred, ((subj, obj), predName)) =>
-      (subj, (predName, obj))
+      (subj, (predNamesMap.value.get(pred), obj))
     }
 
     val relatedEntityNames = regularTriples.filter { case (subj, pred, obj) =>
       obj.startsWith("<")
     }.map { case (subj, pred, obj) =>
-      (pred, (subj, obj))
-    }.leftOuterJoin(names).map { case (pred, ((subj, obj), predName)) =>
-      (obj, (predName, subj))
+      (obj, (predNamesMap.value.get(pred), subj))
     }.join(names).map { case (obj, ((predName, subj), objName)) =>
       (subj, (predName, objName))
     }
@@ -93,9 +95,7 @@ object TriplesToTrec {
     val incomingEntityNames = regularTriples.filter { case (subj, pred, obj) =>
       obj.startsWith("<")
     }.map { case (subj, pred, obj) =>
-      (pred, (subj, obj))
-    }.leftOuterJoin(names).map { case(pred, ((subj, obj), predName)) =>
-      (subj, (predName, obj))
+      (subj, (predNamesMap.value.get(pred), obj))
     }.join(names).map { case (subj, ((predName, obj), subjName)) =>
       (obj, (subjName, predName))
     }
