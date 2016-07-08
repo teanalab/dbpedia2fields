@@ -49,79 +49,66 @@ object TriplesToTrec {
       line.startsWith("<")
     }.map(Util.splitTurtle)
 
-    val names = triples.filter { triple =>
-      namePredicates.contains(triple._1)
-    }.map { triple =>
-      (triple._1, triple._3) // subj, obj
+    val names = triples.filter { case (subj, pred, obj) =>
+      namePredicates.contains(subj)
+    }.map { case (subj, pred, obj) =>
+      (subj, obj)
     }
 
-    val categories = triples.filter { triple =>
-      triple._2 == subjectPredicate
-    }.map {
-      triple => (triple._3, triple._1) // obj, subj
-    }.join(names).map { pair => // obj, (subj, objName)
-      (pair._2._1, pair._2._2) // subj, objName
+    val namesMap = sc.broadcast(names.collectAsMap())
+
+    val categories = triples.filter { case (subj, pred, obj) =>
+      pred == subjectPredicate
+    }.map { case (subj, pred, obj) =>
+      (obj, subj)
+    }.join(names).map { case (obj, (subj, objName)) =>
+      (subj, objName)
     }
 
-    val regularTriples = triples.filter { triple =>
-      !namePredicates.contains(triple._2) &&
-        triple._2 != subjectPredicate &&
-        triple._2 != disambiguatesPredicate &&
-        triple._3 != redirectsPredicate
+    val regularTriples = triples.filter { case (subj, pred, obj) =>
+      !namePredicates.contains(pred) &&
+        pred != subjectPredicate &&
+        pred != disambiguatesPredicate &&
+        pred != redirectsPredicate
     }
 
-    val attributes = regularTriples.filter { triple =>
-      triple._3.startsWith("\"")
-    }.map { triple =>
-      (triple._2, (triple._1, triple._3)) // pred, (subj, obj)
-    }.leftOuterJoin(names).map { pair => // pred, ((subj, obj), predName)
-      val subj = pair._2._1._1
-      val obj = pair._2._1._2
-      val predName = pair._2._2
+    val attributes = regularTriples.filter { case (subj, pred, obj) =>
+      obj.startsWith("\"")
+    }.map { case (subj, pred, obj) =>
+      (pred, (subj, obj))
+    }.leftOuterJoin(names).map { case (pred, ((subj, obj), predName)) =>
       (subj, (predName, obj))
     }
 
-    val relatedEntityNames = regularTriples.filter { triple =>
-      triple._3.startsWith("<")
-    }.map { triple =>
-      (triple._2, (triple._1, triple._3)) // pred, (subj, obj)
-    }.leftOuterJoin(names).map { pair => // pred, ((subj, obj), predName)
-      val subj = pair._2._1._1
-      val predName = pair._2._2
-      val obj = pair._2._1._2
+    val relatedEntityNames = regularTriples.filter { case (subj, pred, obj) =>
+      obj.startsWith("<")
+    }.map { case (subj, pred, obj) =>
+      (pred, (subj, obj))
+    }.leftOuterJoin(names).map { case (pred, ((subj, obj), predName)) =>
       (obj, (predName, subj))
-    }.join(names).map { pair => // obj, ((predName, subj), objName)
-      val subj = pair._2._1._2
-      val predName = pair._2._1._1
-      val objName = pair._2._2
+    }.join(names).map { case (obj, ((predName, subj), objName)) =>
       (subj, (predName, objName))
     }
 
     // Let's don't reverse predicate-object here. E.g for Animal_Farm author George_Orwell include "Animal Farm author"
     // into incoming links for George Orwell
-    val incomingEntityNames = regularTriples.filter { triple =>
-      triple._3.startsWith("<")
-    }.map { triple =>
-      (triple._2, (triple._1, triple._3)) // pred, (subj, obj)
-    }.leftOuterJoin(names).map { pair => // pred, ((subj, obj), predName)
-      val subj = pair._2._1._1
-      val predName = pair._2._2
-      val obj = pair._2._1._2
+    val incomingEntityNames = regularTriples.filter { case (subj, pred, obj) =>
+      obj.startsWith("<")
+    }.map { case (subj, pred, obj) =>
+      (pred, (subj, obj))
+    }.leftOuterJoin(names).map { case(pred, ((subj, obj), predName)) =>
       (subj, (predName, obj))
-    }.join(names).map { pair => // subj, ((predName, obj), subjName)
-      val obj = pair._2._1._2
-      val predName = pair._2._1._1
-      val subjName = pair._2._2
+    }.join(names).map { case (subj, ((predName, obj), subjName)) =>
       (obj, (subjName, predName))
     }
 
     // Consider only incoming disambiguates and redirects
-    val similarEntityNames = triples.filter { triple =>
-      triple._2 == disambiguatesPredicate || triple._2 == redirectsPredicate
-    }.map {
-      triple => (triple._1, triple._3) // subj, obj
-    }.join(names).map { pair => // subj, (obj, subjName)
-      (pair._2._1, pair._2._2) // obj, subjName
+    val similarEntityNames = triples.filter { case (subj, pred, obj) =>
+      pred == disambiguatesPredicate || pred == redirectsPredicate
+    }.map { case (subj, pred, obj) =>
+      (subj, obj)
+    }.join(names).map { case (subj, (obj, subjName)) =>
+      (obj, subjName)
     }
 
     new CoGroupedRDD(Seq(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames),

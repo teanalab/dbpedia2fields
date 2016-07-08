@@ -5,7 +5,13 @@ package edu.wayne.dbpedia2fields
   */
 object Util {
   def splitTurtle(str: String): (String, String, String) = {
-    val splitStr = str.split(" ", 3)
-    (splitStr(0), splitStr(1), splitStr(2).substring(0, splitStr(2).lastIndexOf(' ')))
+    try {
+      val splitStr = str.split(" ", 3)
+      val objEnd = if (splitStr(2).lastIndexOf(' ') > -1) splitStr(2).lastIndexOf(' ') else splitStr(2).lastIndexOf('.')
+      (splitStr(0), splitStr(1), splitStr(2).substring(0, objEnd))
+    } catch { case e: Exception =>
+      println(str)
+      throw new Exception(str, e)
+    }
   }
 }
