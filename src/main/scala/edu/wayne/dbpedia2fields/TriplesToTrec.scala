@@ -55,8 +55,6 @@ object TriplesToTrec {
       (subj, obj)
     }
 
-    val namesMap = sc.broadcast(names.collectAsMap())
-
     val categories = triples.filter { case (subj, pred, obj) =>
       pred == subjectPredicate
     }.map { case (subj, pred, obj) =>
@@ -114,12 +112,12 @@ object TriplesToTrec {
     new CoGroupedRDD(Seq(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames),
       Partitioner.defaultPartitioner(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames)).
       mapValues { case Array(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames) =>
-        (names.asInstanceOf[Array[String]],
-          attributes.asInstanceOf[Array[(Option[String], String)]],
-          categories.asInstanceOf[Array[String]],
-          similarEntityNames.asInstanceOf[Array[String]],
-          relatedEntityNames.asInstanceOf[Array[(Option[String], String)]],
-          incomingEntityNames.asInstanceOf[Array[(String, Option[String])]])
+        (names.asInstanceOf[Seq[String]],
+          attributes.asInstanceOf[Seq[(Option[String], String)]],
+          categories.asInstanceOf[Seq[String]],
+          similarEntityNames.asInstanceOf[Seq[String]],
+          relatedEntityNames.asInstanceOf[Seq[(Option[String], String)]],
+          incomingEntityNames.asInstanceOf[Seq[(String, Option[String])]])
       }.flatMap { case (entityUri, (names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames)) =>
       Array("<DOC>\n<DOCNO>" + entityUri + "</DOCNO>\n<TEXT>") ++
         Array("<names>") ++
