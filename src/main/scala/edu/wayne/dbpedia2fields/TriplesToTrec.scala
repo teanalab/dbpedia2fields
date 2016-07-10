@@ -1,5 +1,6 @@
 package edu.wayne.dbpedia2fields
 
+import edu.wayne.dbpedia2fields.Util.{extractLiteralText, splitTurtle}
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.CoGroupedRDD
 import org.apache.spark.{Partitioner, SparkConf, SparkContext}
@@ -47,13 +48,13 @@ object TriplesToTrec {
     val sc = new SparkContext(conf)
     val triples = sc.textFile(pathToTriples).filter { line =>
       line.startsWith("<")
-    }.map(Util.splitTurtle)
+    }.map(splitTurtle)
 
     val names = triples.filter { case (subj, pred, obj) =>
-      namePredicates.contains(pred)
+      namePredicates.contains(pred) && obj.startsWith("\"")
     }.map { case (subj, pred, obj) =>
       (subj, obj)
-    }
+    }.cache()
 
     val categories = triples.filter { case (subj, pred, obj) =>
       pred == subjectPredicate
@@ -72,7 +73,7 @@ object TriplesToTrec {
 
     val predNamesMap = sc.broadcast(regularTriples.map { case (subj, pred, obj) =>
       (pred, None)
-    }.join(names).map { case (pred, (_, predName)) =>
+    }.distinct().join(names).map { case (pred, (_, predName)) =>
       (pred, predName)
     }.collectAsMap())
 
@@ -122,24 +123,38 @@ object TriplesToTrec {
       }.flatMap { case (entityUri, (namesSeq, attributesSeq, categoriesSeq, similarEntityNamesSeq,
     relatedEntityNamesSeq, incomingEntityNamesSeq)) =>
       Array("<DOC>\n<DOCNO>" + entityUri + "</DOCNO>\n<TEXT>") ++
-        Array("<names>") ++
-        namesSeq ++
-        Array("</names>") ++
-        Array("<attributes>") ++
-        attributesSeq ++
-        Array("</attributes>") ++
-        Array("<categories>") ++
-        categoriesSeq ++
-        Array("</categories>") ++
-        Array("<similarentitynames>") ++
-        similarEntityNamesSeq ++
-        Array("</similarentitynames>") ++
-        Array("<relatedentitynames>") ++
-        relatedEntityNamesSeq ++
-        Array("</relatedentitynames>") ++
-        Array("<incomingentitynames>") ++
-        incomingEntityNamesSeq ++
-        Array("</incomingentitynames>")
+        (if (namesSeq.nonEmpty) Array("<names>") ++
+          namesSeq.map(extractLiteralText) ++
+          Array("</names>")
+        else Seq()) ++
+        (if (attributesSeq.nonEmpty) Array("<attributes>") ++
+          attributesSeq.map {
+            case (Some(predName), obj) => extractLiteralText(predName) + " " + extractLiteralText(obj)
+            case (None, obj) => extractLiteralText(obj)
+          } ++ Array("</attributes>")
+        else Seq()) ++
+        (if (categoriesSeq.nonEmpty) Array("<categories>") ++
+          categoriesSeq.map(extractLiteralText) ++
+          Array("</categories>")
+        else Seq()) ++
+        (if (similarEntityNamesSeq.nonEmpty) Array("<similarentitynames>") ++
+          similarEntityNamesSeq.map(extractLiteralText) ++
+          Array("</similarentitynames>")
+        else Seq()) ++
+        (if (relatedEntityNamesSeq.nonEmpty) Array("<relatedentitynames>") ++
+          relatedEntityNamesSeq.map {
+            case (Some(predName), objName) => extractLiteralText(predName) + " " + extractLiteralText(objName)
+            case (None, objName) => extractLiteralText(objName)
+          } ++
+          Array("</relatedentitynames>")
+        else Seq()) ++
+        (if (incomingEntityNamesSeq.nonEmpty) Array("<incomingentitynames>") ++
+          incomingEntityNamesSeq.map {
+            case (subjName, Some(predName)) => extractLiteralText(subjName) + " " + extractLiteralText(predName)
+            case (subjName, None) => extractLiteralText(subjName)
+          } ++
+          Array("</incomingentitynames>")
+        else Seq())
     }.saveAsTextFile(pathToOutput)
   }
 }
