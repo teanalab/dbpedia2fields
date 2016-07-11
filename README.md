@@ -5,6 +5,7 @@ Run TriplesToTrec with the following 14 files from DBPedia 2015-10 as input
 * category_labels_en.ttl
 * disambiguations_en.ttl
 * infobox_properties_en.ttl
+* infobox_property_definitions_en.ttl
 * instance_types_transitive_en.ttl
 * labels_en.ttl
 * long_abstracts_en.ttl
