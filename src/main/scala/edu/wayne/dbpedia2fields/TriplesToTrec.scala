@@ -54,7 +54,7 @@ object TriplesToTrec {
       namePredicates.contains(pred) && obj.startsWith("\"")
     }.map { case (subj, pred, obj) =>
       (subj, obj)
-    }.cache()
+    }.distinct().cache()
 
     val categories = triples.filter { case (subj, pred, obj) =>
       pred == subjectPredicate
@@ -62,7 +62,7 @@ object TriplesToTrec {
       (obj, subj)
     }.join(names).map { case (obj, (subj, objName)) =>
       (subj, objName)
-    }
+    }.distinct()
 
     val regularTriples = triples.filter { case (subj, pred, obj) =>
       !namePredicates.contains(pred) &&
@@ -75,13 +75,13 @@ object TriplesToTrec {
       (pred, None)
     }.distinct().join(names).map { case (pred, (_, predName)) =>
       (pred, predName)
-    }.collectAsMap())
+    }.distinct().collectAsMap())
 
     val attributes = regularTriples.filter { case (subj, pred, obj) =>
       obj.startsWith("\"")
     }.map { case (subj, pred, obj) =>
       (subj, (predNamesMap.value.get(pred), obj))
-    }
+    }.distinct()
 
     val relatedEntityNames = regularTriples.filter { case (subj, pred, obj) =>
       obj.startsWith("<")
@@ -89,7 +89,7 @@ object TriplesToTrec {
       (obj, (predNamesMap.value.get(pred), subj))
     }.join(names).map { case (obj, ((predName, subj), objName)) =>
       (subj, (predName, objName))
-    }
+    }.distinct()
 
     // Let's don't reverse predicate-object here. E.g for Animal_Farm author George_Orwell include "Animal Farm author"
     // into incoming links for George Orwell
@@ -99,7 +99,7 @@ object TriplesToTrec {
       (subj, (predNamesMap.value.get(pred), obj))
     }.join(names).map { case (subj, ((predName, obj), subjName)) =>
       (obj, (subjName, predName))
-    }
+    }.distinct()
 
     // Consider only incoming disambiguates and redirects
     val similarEntityNames = triples.filter { case (subj, pred, obj) =>
@@ -108,7 +108,7 @@ object TriplesToTrec {
       (subj, obj)
     }.join(names).map { case (subj, (obj, subjName)) =>
       (obj, subjName)
-    }
+    }.distinct()
 
     new CoGroupedRDD(Seq(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames),
       Partitioner.defaultPartitioner(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames)).
@@ -124,36 +124,37 @@ object TriplesToTrec {
     relatedEntityNamesSeq, incomingEntityNamesSeq)) =>
       Array("<DOC>\n<DOCNO>" + entityUri + "</DOCNO>\n<TEXT>") ++
         (if (namesSeq.nonEmpty) Array("<names>") ++
-          namesSeq.map(extractLiteralText) ++
+          namesSeq.map(extractLiteralText).distinct ++
           Array("</names>")
         else Seq()) ++
         (if (attributesSeq.nonEmpty) Array("<attributes>") ++
           attributesSeq.map {
             case (Some(predName), obj) => extractLiteralText(predName) + " " + extractLiteralText(obj)
             case (None, obj) => extractLiteralText(obj)
-          } ++ Array("</attributes>")
+          }.distinct ++ Array("</attributes>")
         else Seq()) ++
         (if (categoriesSeq.nonEmpty) Array("<categories>") ++
-          categoriesSeq.map(extractLiteralText) ++
+          categoriesSeq.map(extractLiteralText).distinct ++
           Array("</categories>")
         else Seq()) ++
         (if (similarEntityNamesSeq.nonEmpty) Array("<similarentitynames>") ++
-          similarEntityNamesSeq.map(extractLiteralText) ++
+          similarEntityNamesSeq.map(extractLiteralText).distinct ++
           Array("</similarentitynames>")
         else Seq()) ++
         (if (relatedEntityNamesSeq.nonEmpty) Array("<relatedentitynames>") ++
           relatedEntityNamesSeq.map {
             case (Some(predName), objName) => extractLiteralText(predName) + " " + extractLiteralText(objName)
             case (None, objName) => extractLiteralText(objName)
-          } ++
+          }.distinct ++
           Array("</relatedentitynames>")
         else Seq()) ++
         (if (incomingEntityNamesSeq.nonEmpty) Array("<incomingentitynames>") ++
           incomingEntityNamesSeq.map {
             case (subjName, Some(predName)) => extractLiteralText(subjName) + " " + extractLiteralText(predName)
             case (subjName, None) => extractLiteralText(subjName)
-          } ++
-          Array("</incomingentitynames>")
+          }.distinct ++
+          Array("</incomingentitynames>") ++
+          Array("</TEXT>\n</DOC>")
         else Seq())
     }.saveAsTextFile(pathToOutput)
   }
