@@ -25,4 +25,9 @@ object Util {
         throw new Exception(obj, e)
     }
   }
+
+  def extractFileName(obj: String): String = {
+    '"' + obj.stripPrefix("<http://dbpedia.org/resource/File:").stripSuffix(">").replaceAll("""\.[a-zA-Z]*$""", "")
+      .replace('_', ' ') + '"'
+  }
 }

@@ -1,8 +1,8 @@
 package edu.wayne.dbpedia2fields
 
-import edu.wayne.dbpedia2fields.Util.{extractLiteralText, splitTurtle}
+import edu.wayne.dbpedia2fields.Util.{extractFileName, extractLiteralText, splitTurtle}
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.CoGroupedRDD
+import org.apache.spark.rdd.{CoGroupedRDD, RDD}
 import org.apache.spark.{Partitioner, SparkConf, SparkContext}
 
 /**
@@ -38,6 +38,8 @@ object TriplesToTrec {
   val disambiguatesPredicate = "<http://dbpedia.org/ontology/wikiPageDisambiguates>"
 
   val redirectsPredicate = "<http://dbpedia.org/ontology/wikiPageRedirects>"
+
+  val wikiLinkTextPredicate = "<http://dbpedia.org/ontology/wikiPageWikiLinkText>"
 
   def main(args: Array[String]): Unit = {
     val pathToTriples = args(0)
@@ -77,11 +79,17 @@ object TriplesToTrec {
       (pred, predName)
     }.distinct().collectAsMap())
 
+    val filenames: RDD[(String, (Option[String], String))] = regularTriples.filter { case (subj, pred, obj) =>
+      obj.startsWith("<http://dbpedia.org/resource/File:")
+    }.map { case (subj, pred, obj) =>
+      (subj, (None, extractFileName(obj)))
+    }
+
     val attributes = regularTriples.filter { case (subj, pred, obj) =>
       obj.startsWith("\"")
     }.map { case (subj, pred, obj) =>
       (subj, (predNamesMap.value.get(pred), obj))
-    }.distinct()
+    }.union(filenames).distinct()
 
     val relatedEntityNames = regularTriples.filter { case (subj, pred, obj) =>
       obj.startsWith("<")
@@ -89,7 +97,7 @@ object TriplesToTrec {
       (obj, (predNamesMap.value.get(pred), subj))
     }.join(names).map { case (obj, ((predName, subj), objName)) =>
       (subj, (predName, objName))
-    }.distinct()
+    }.union(filenames).distinct()
 
     // Let's don't reverse predicate-object here. E.g for Animal_Farm author George_Orwell include "Animal Farm author"
     // into incoming links for George Orwell
@@ -108,7 +116,14 @@ object TriplesToTrec {
       (subj, obj)
     }.join(names).map { case (subj, (obj, subjName)) =>
       (obj, subjName)
-    }.distinct()
+    }.union(
+      // <dbo:wikiPageWikiLinkText>
+      regularTriples.filter { case (subj, pred, obj) =>
+        pred == wikiLinkTextPredicate
+      }.map { case (subj, pred, obj) =>
+        (subj, obj)
+      }
+    ).distinct()
 
     new CoGroupedRDD(Seq(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames),
       Partitioner.defaultPartitioner(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames)).
