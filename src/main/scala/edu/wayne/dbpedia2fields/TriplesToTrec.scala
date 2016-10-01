@@ -168,9 +168,9 @@ object TriplesToTrec {
             case (subjName, Some(predName)) => extractLiteralText(subjName) + " " + extractLiteralText(predName)
             case (subjName, None) => extractLiteralText(subjName)
           }.distinct ++
-          Array("</incomingentitynames>") ++
-          Array("</TEXT>\n</DOC>")
-        else Seq())
+          Array("</incomingentitynames>")
+        else Seq()) ++
+        Array("</TEXT>\n</DOC>")
     }.saveAsTextFile(pathToOutput)
   }
 }
