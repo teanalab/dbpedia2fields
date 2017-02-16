@@ -1,4 +1,4 @@
-Run TriplesToTrec with the following 14 files from DBPedia 2015-10 as input
+Run TriplesToTrec with the following 15 files from DBPedia 2015-10 as input
 
 * anchor_text_en.ttl
 * article_categories_en.ttl
