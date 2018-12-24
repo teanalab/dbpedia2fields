@@ -16,10 +16,17 @@ object Util {
     }
   }
 
+  def splitCamelCase(s: String): String = {
+    return s.replaceAll(
+      "(?<=[a-z])(?=[A-Z])",
+      " "
+    ).replaceAll("  ", " ")
+  }
+
   // since we only have english string literals
   def extractLiteralText(obj: String): String = {
     try {
-      StringEscapeUtils.unescapeJava(obj.substring(obj.indexOf("\"") + 1, obj.lastIndexOf("\"")))
+      splitCamelCase(StringEscapeUtils.unescapeJava(obj.substring(obj.indexOf("\"") + 1, obj.lastIndexOf("\"")))).replaceAll("  ", " ")
     } catch {
       case e: Exception =>
         throw new Exception(obj, e)

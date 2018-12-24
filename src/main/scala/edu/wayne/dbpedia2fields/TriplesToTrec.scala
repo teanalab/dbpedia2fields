@@ -30,14 +30,41 @@ object TriplesToTrec {
     "<http://dbpedia.org/property/alternativeNames>",
     "<http://dbpedia.org/property/otherNames>",
     "<http://dbpedia.org/property/names>",
+    "<http://dbpedia.org/property/longName>",
+    "<http://dbpedia.org/property/conventionalLongName>",
+    "<http://dbpedia.org/property/commonName>",
+    "<http://dbpedia.org/property/altname>",
+    "<http://dbpedia.org/property/glottorefname>",
+    "<http://dbpedia.org/property/sname>",
+    "<http://dbpedia.org/ontology/longName>",
+    "<http://dbpedia.org/ontology/wikiPageWikiLinkText>",
+
     "<http://www.w3.org/2000/01/rdf-schema#label>"
-  )
+  ).map(s => s.toLowerCase())
+
+  val blacklist = Seq(
+    "<http://www.w3.org/2002/07/owl#differentFrom>",
+    "<http://dbpedia.org/property/urlname>",
+    "<http://dbpedia.org/property/isbn>",
+    "<http://dbpedia.org/property/issn>",
+    "<http://dbpedia.org/ontology/isbn>",
+    "<http://dbpedia.org/ontology/issn>",
+    "<http://dbpedia.org/property/groupstyle>",
+    "<http://dbpedia.org/property/align>",
+    "<http://dbpedia.org/property/width>",
+    "<http://dbpedia.org/property/bgcolor>",
+    "<http://dbpedia.org/property/direction>",
+    "<http://dbpedia.org/property/headerAlign>",
+    "<http://dbpedia.org/property/footerAlign>",
+    "<http://dbpedia.org/property/headerBackground>",
+    "<http://dbpedia.org/property/voy>",
+    "<http://dbpedia.org/property/commons>",
+    "<http://dbpedia.org/property/id>",
+    "<http://dbpedia.org/property/reason>",
+    "<http://dbpedia.org/property/hideroot>"
+  ).map(s => s.toLowerCase())
 
   val subjectPredicate = "<http://purl.org/dc/terms/subject>"
-
-  val disambiguatesPredicate = "<http://dbpedia.org/ontology/wikiPageDisambiguates>"
-
-  val redirectsPredicate = "<http://dbpedia.org/ontology/wikiPageRedirects>"
 
   val wikiLinkTextPredicate = "<http://dbpedia.org/ontology/wikiPageWikiLinkText>"
 
@@ -57,7 +84,7 @@ object TriplesToTrec {
     }.map(splitTurtle)
 
     val names = triples.filter { case (subj, pred, obj) =>
-      namePredicates.contains(pred) && obj.startsWith("\"")
+      namePredicates.contains(pred.toLowerCase()) && obj.startsWith("\"")
     }.map { case (subj, pred, obj) =>
       (subj, obj)
     }.distinct().cache()
@@ -73,10 +100,9 @@ object TriplesToTrec {
     }.distinct()
 
     val regularTriples = triples.filter { case (subj, pred, obj) =>
-      !namePredicates.contains(pred) &&
+      !namePredicates.contains(pred.toLowerCase()) &&
         pred != subjectPredicate &&
-        pred != disambiguatesPredicate &&
-        pred != redirectsPredicate
+        !blacklist.contains(pred.toLowerCase())
     }
 
     val predNamesMap = sc.broadcast(regularTriples.map { case (subj, pred, obj) =>
@@ -105,51 +131,30 @@ object TriplesToTrec {
       (subj, (predName, objName))
     }.union(filenames).distinct()
 
-    // Let's don't reverse predicate-object here. E.g for Animal_Farm author George_Orwell include "Animal Farm author"
-    // into incoming links for George Orwell
-    val incomingEntityNames = regularTriples.filter { case (subj, pred, obj) =>
-      obj.startsWith("<")
-    }.map { case (subj, pred, obj) =>
-      (subj, (predNamesMap.value.get(pred), obj))
-    }.join(namesCompact).map { case (subj, ((predName, obj), subjName)) =>
-      (obj, (subjName, predName))
-    }.distinct()
-
-    // Consider only incoming disambiguates and redirects
-    val similarEntityNames = triples.filter { case (subj, pred, obj) =>
-      pred == disambiguatesPredicate || pred == redirectsPredicate
-    }.map { case (subj, pred, obj) =>
-      (subj, obj)
-    }.join(names).map { case (subj, (obj, subjName)) =>
-      (obj, subjName)
-    }.union(
-      // <dbo:wikiPageWikiLinkText>
-      regularTriples.filter { case (subj, pred, obj) =>
-        pred == wikiLinkTextPredicate
-      }.map { case (subj, pred, obj) =>
-        (subj, obj)
-      }
-    ).distinct()
-
-    val indexedEntities = triples.filter { case (subj, pred, obj) =>
-      pred == rdfsCommentPredicate || pred == rdfsLabelPredicate
+    val commentedEntities = triples.filter { case (subj, pred, obj) =>
+      pred == rdfsCommentPredicate
     }.map { case (subj, pred, obj) =>
       (subj, true)
-    }.distinct()
+    }
 
-    new CoGroupedRDD(Seq(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames, indexedEntities),
-      Partitioner.defaultPartitioner(names, attributes, categories, similarEntityNames, relatedEntityNames, incomingEntityNames, indexedEntities)).
-      mapValues { case Array(namesArray, attributesArray, categoriesArray, similarEntityNamesArray,
-      relatedEntityNamesArray, incomingEntityNamesArray, indexedEntitiesArray) =>
+    val labelledEntities = triples.filter { case (subj, pred, obj) =>
+      pred == rdfsLabelPredicate
+    }.map { case (subj, pred, obj) =>
+      (subj, true)
+    }
+
+    val indexedEntities = commentedEntities.intersection(labelledEntities)
+
+    new CoGroupedRDD(Seq(names, attributes, categories, relatedEntityNames, indexedEntities),
+      Partitioner.defaultPartitioner(names, attributes, categories, relatedEntityNames, indexedEntities)).
+      mapValues { case Array(namesArray, attributesArray, categoriesArray, relatedEntityNamesArray, indexedEntitiesArray) =>
         (namesArray.asInstanceOf[Seq[String]],
           attributesArray.asInstanceOf[Seq[(Option[String], String)]],
           categoriesArray.asInstanceOf[Seq[String]],
-          similarEntityNamesArray.asInstanceOf[Seq[String]],
           relatedEntityNamesArray.asInstanceOf[Seq[(Option[String], String)]],
-          incomingEntityNamesArray.asInstanceOf[Seq[(String, Option[String])]],
           indexedEntitiesArray.asInstanceOf[Seq[Boolean]])
-      }.flatMap { case (entityUri, (namesSeq, attributesSeq, categoriesSeq, similarEntityNamesSeq,
-    relatedEntityNamesSeq, incomingEntityNamesSeq, indexedEntitiesSeq)) =>
+      }.flatMap { case (entityUri, (namesSeq, attributesSeq, categoriesSeq,
+    relatedEntityNamesSeq, indexedEntitiesSeq)) =>
       if (indexedEntitiesSeq.nonEmpty)
         Array("<DOC>\n<DOCNO>" + entityUri + "</DOCNO>\n<TEXT>") ++
           (if (namesSeq.nonEmpty) Array("<names>") ++
@@ -166,23 +171,12 @@ object TriplesToTrec {
             categoriesSeq.map(extractLiteralText).distinct ++
             Array("</categories>")
           else Seq()) ++
-          (if (similarEntityNamesSeq.nonEmpty) Array("<similarentitynames>") ++
-            similarEntityNamesSeq.map(extractLiteralText).distinct ++
-            Array("</similarentitynames>")
-          else Seq()) ++
           (if (relatedEntityNamesSeq.nonEmpty) Array("<relatedentitynames>") ++
             relatedEntityNamesSeq.map {
               case (Some(predName), objName) => extractLiteralText(predName) + " " + extractLiteralText(objName)
               case (None, objName) => extractLiteralText(objName)
             }.distinct ++
             Array("</relatedentitynames>")
-          else Seq()) ++
-          (if (incomingEntityNamesSeq.nonEmpty) Array("<incomingentitynames>") ++
-            incomingEntityNamesSeq.map {
-              case (subjName, Some(predName)) => extractLiteralText(subjName) + " " + extractLiteralText(predName)
-              case (subjName, None) => extractLiteralText(subjName)
-            }.distinct ++
-            Array("</incomingentitynames>")
           else Seq()) ++
           Array("</TEXT>\n</DOC>")
       else Array[String]()
